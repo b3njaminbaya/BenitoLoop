@@ -1,11 +1,14 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { getStoredReferralCode } from "@/lib/referral";
 
 type Profile = {
   id: string;
   full_name: string | null;
   role: "donor" | "buyer" | "partner" | "admin";
+  referral_code: string;
+  credit_balance: number;
 };
 
 type AuthContextValue = {
@@ -49,17 +52,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
     supabase
       .from("profiles")
-      .select("id, full_name, role")
+      .select("id, full_name, role, referral_code, credit_balance")
       .eq("id", userId)
       .single()
       .then(({ data }) => setProfile(data as Profile | null));
   }, [session?.user?.id]);
 
   const signUp: AuthContextValue["signUp"] = async (email, password, fullName) => {
+    const referralCode = getStoredReferralCode();
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { full_name: fullName } },
+      options: { data: { full_name: fullName, referral_code: referralCode } },
     });
     return { error: error?.message ?? null };
   };

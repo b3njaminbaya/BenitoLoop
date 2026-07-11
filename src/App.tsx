@@ -13,17 +13,22 @@ import NotFound from "./pages/NotFound";
 
 const Donate = lazy(() => import("./pages/Donate"));
 const Marketplace = lazy(() => import("./pages/Marketplace"));
+const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const Impact = lazy(() => import("./pages/Impact"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const TermsOfService = lazy(() => import("./pages/TermsOfService"));
+const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
 const AdminLayout = lazy(() => import("./pages/admin/AdminLayout"));
 const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
 const AdminProducts = lazy(() => import("./pages/admin/AdminProducts"));
 const AdminCategories = lazy(() => import("./pages/admin/AdminCategories"));
 const AdminDonations = lazy(() => import("./pages/admin/AdminDonations"));
+const AdminReviews = lazy(() => import("./pages/admin/AdminReviews"));
 const AdminPartners = lazy(() => import("./pages/admin/AdminPartners"));
 const AdminOrders = lazy(() => import("./pages/admin/AdminOrders"));
 const AdminAuditLog = lazy(() => import("./pages/admin/AdminAuditLog"));
+const AdminEmailLog = lazy(() => import("./pages/admin/AdminEmailLog"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
 const Checkout = lazy(() => import("./pages/Checkout"));
 const OrderStatus = lazy(() => import("./pages/OrderStatus"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
@@ -45,9 +50,11 @@ const App = () => (
                   <Route path="/" element={<Index />} />
                   <Route path="/donate" element={<Donate />} />
                   <Route path="/marketplace" element={<Marketplace />} />
+                  <Route path="/product/:slug" element={<ProductDetail />} />
                   <Route path="/impact" element={<Impact />} />
                   <Route path="/privacypolicy" element={<PrivacyPolicy />} />
                   <Route path="/termsofservice" element={<TermsOfService />} />
+                  <Route path="/cookiepolicy" element={<CookiePolicy />} />
                   <Route path="/partnerwithus" element={<PartnerWithUs />} />
                   <Route path="/checkout" element={<Checkout />} />
                   <Route path="/order/:id" element={<OrderStatus />} />
@@ -61,9 +68,12 @@ const App = () => (
                   <Route path="products" element={<AdminProducts />} />
                   <Route path="categories" element={<AdminCategories />} />
                   <Route path="donations" element={<AdminDonations />} />
+                  <Route path="reviews" element={<AdminReviews />} />
                   <Route path="partners" element={<AdminPartners />} />
                   <Route path="orders" element={<AdminOrders />} />
                   <Route path="audit-log" element={<AdminAuditLog />} />
+                  <Route path="email-log" element={<AdminEmailLog />} />
+                  <Route path="users" element={<AdminUsers />} />
                 </Route>
               </Routes>
             </Suspense>

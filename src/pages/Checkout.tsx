@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -9,10 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import FormBanner, { type FormBannerState } from "@/components/FormBanner";
 import { useCart } from "@/lib/cart-context";
+import { useAuth } from "@/lib/auth-context";
 import { createOrder } from "@/lib/orders";
 import { initiateMpesaPayment, normalizeKenyanPhone } from "@/lib/mpesa";
+import { getMyRewards } from "@/lib/rewards";
 
 const checkoutSchema = z.object({
   name: z.string().trim().min(2, "Enter your full name"),
@@ -25,14 +28,28 @@ type CheckoutFormValues = z.infer<typeof checkoutSchema>;
 
 const Checkout = () => {
   const { items, totalPrice, clear } = useCart();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [banner, setBanner] = useState<FormBannerState | null>(null);
+  const [creditBalance, setCreditBalance] = useState(0);
+  const [applyCredit, setApplyCredit] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setCreditBalance(0);
+      return;
+    }
+    getMyRewards(user.id).then(({ data }) => setCreditBalance(data?.creditBalance ?? 0));
+  }, [user]);
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<CheckoutFormValues>({ resolver: zodResolver(checkoutSchema) });
+
+  const creditToApply = applyCredit ? Math.min(creditBalance, totalPrice) : 0;
+  const payableTotal = totalPrice - creditToApply;
 
   const onSubmit = handleSubmit(async (values) => {
     setBanner(null);
@@ -46,12 +63,16 @@ const Checkout = () => {
       return;
     }
 
-    const { order, error } = await createOrder(items, {
-      name: values.name,
-      phone: normalizedPhone,
-      email: values.email || undefined,
-      address: values.address,
-    });
+    const { order, error } = await createOrder(
+      items,
+      {
+        name: values.name,
+        phone: normalizedPhone,
+        email: values.email || undefined,
+        address: values.address,
+      },
+      applyCredit
+    );
 
     if (error || !order) {
       setBanner({ type: "error", title: "Couldn't create your order", description: error ?? undefined });
@@ -135,9 +156,26 @@ const Checkout = () => {
               </div>
             ))}
           </div>
+
+          {creditBalance > 0 && (
+            <div className="mt-4 flex items-center gap-2 border-t pt-4">
+              <Checkbox id="apply-credit" checked={applyCredit} onCheckedChange={(v) => setApplyCredit(v === true)} />
+              <Label htmlFor="apply-credit" className="text-sm font-normal cursor-pointer">
+                Use my Nyuzi credit (${creditBalance.toFixed(2)} available)
+              </Label>
+            </div>
+          )}
+
+          {creditToApply > 0 && (
+            <div className="mt-2 flex justify-between text-sm text-primary">
+              <span>Credit applied</span>
+              <span>-${creditToApply.toFixed(2)}</span>
+            </div>
+          )}
+
           <div className="mt-4 flex justify-between border-t pt-4 font-semibold">
             <span>Total</span>
-            <span>${totalPrice.toFixed(2)}</span>
+            <span>${payableTotal.toFixed(2)}</span>
           </div>
         </div>
       </div>

@@ -25,6 +25,10 @@ const statusCopy: Record<Order["status"], { title: string; description: string }
     title: "Payment didn't go through",
     description: "The M-Pesa payment wasn't completed. You can contact us to try again.",
   },
+  shipped: {
+    title: "On its way",
+    description: "Your order has been dispatched — see the tracking details below.",
+  },
   fulfilled: {
     title: "Order fulfilled",
     description: "This order has been delivered. Thanks for supporting circular fashion.",
@@ -36,7 +40,8 @@ const statusCopy: Record<Order["status"], { title: string; description: string }
 };
 
 const statusIcon = (status: Order["status"]) => {
-  if (status === "paid" || status === "fulfilled") return <CheckCircle2 className="text-primary" size={48} />;
+  if (status === "paid" || status === "shipped" || status === "fulfilled")
+    return <CheckCircle2 className="text-primary" size={48} />;
   if (status === "payment_failed" || status === "cancelled") return <XCircle className="text-destructive" size={48} />;
   return <Clock className="text-gold" size={48} />;
 };
@@ -111,6 +116,20 @@ const OrderStatus = () => {
             <span className="text-muted-foreground">M-Pesa receipt</span>
             <span className="font-mono">{order.mpesa_receipt_number}</span>
           </div>
+        )}
+        {order.tracking_number && (
+          <>
+            {order.shipping_carrier && (
+              <div className="mt-2 flex justify-between">
+                <span className="text-muted-foreground">Carrier</span>
+                <span>{order.shipping_carrier}</span>
+              </div>
+            )}
+            <div className="mt-2 flex justify-between">
+              <span className="text-muted-foreground">Tracking number</span>
+              <span className="font-mono">{order.tracking_number}</span>
+            </div>
+          </>
         )}
       </div>
 

@@ -19,6 +19,7 @@ import Seo from "@/components/Seo";
 import FormBanner, { type FormBannerState } from "@/components/FormBanner";
 import { submitDonation } from "@/lib/submissions";
 import { classifyDonationPhoto, type ClassificationSuggestion } from "@/lib/photo-classifier";
+import { uploadDonationPhotos } from "@/lib/donation-photos";
 import {
   FaTshirt,
   FaHandHoldingHeart,
@@ -70,8 +71,12 @@ const Donate = () => {
   const [banner, setBanner] = useState<FormBannerState | null>(null);
   const [suggestion, setSuggestion] = useState<ClassificationSuggestion | null>(null);
   const [classifying, setClassifying] = useState(false);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const photosRef = useRef<HTMLInputElement>(null);
   const pickupIntent = useRef(false);
+  // Kept separately from `suggestion` (which clears once shown/accepted) so
+  // submission can still record what the AI suggested either way.
+  const lastSuggestionRef = useRef<ClassificationSuggestion | null>(null);
 
   const {
     register,
@@ -96,11 +101,13 @@ const Donate = () => {
   const handlePhotosChange = async (files: File[]) => {
     setPhotos(files);
     setSuggestion(null);
+    lastSuggestionRef.current = null;
     if (files.length === 0) return;
     setClassifying(true);
     const result = await classifyDonationPhoto(files[0]);
     setClassifying(false);
     setSuggestion(result);
+    lastSuggestionRef.current = result;
   };
 
   const acceptSuggestion = () => {
@@ -125,26 +132,38 @@ const Donate = () => {
   const onSubmit = handleSubmit(async (values) => {
     setBanner(null);
     const pickupRequested = pickupIntent.current;
-    const { error } = await submitDonation({
+    const { donationId, error } = await submitDonation({
       title: values.title,
       category: values.category,
       condition,
       notes: values.notes,
       photoCount: photos.length,
       pickupRequested,
+      aiSuggestedCategory: lastSuggestionRef.current?.category,
+      aiConfidence: lastSuggestionRef.current?.confidence,
     });
 
-    if (error) {
-      setBanner({ type: "error", title: "Couldn't save your donation", description: error });
-      toast.error("Couldn't save your donation", { description: error });
+    if (error || !donationId) {
+      setBanner({ type: "error", title: "Couldn't save your donation", description: error ?? undefined });
+      toast.error("Couldn't save your donation", { description: error ?? undefined });
       return;
+    }
+
+    let photoNote = "";
+    if (photos.length > 0) {
+      setUploadingPhotos(true);
+      const { uploaded, failed } = await uploadDonationPhotos(donationId, photos);
+      setUploadingPhotos(false);
+      if (failed > 0) {
+        photoNote = ` ${uploaded} of ${photos.length} photo${photos.length === 1 ? "" : "s"} uploaded — the donation itself is saved either way.`;
+      }
     }
 
     setBanner({
       type: "success",
       title: pickupRequested ? "Donation saved — pickup requested" : "Donation saved",
       description:
-        "We'll follow up by email to coordinate collection; pickup scheduling is still manual for now.",
+        "We'll follow up by email to coordinate collection; pickup scheduling is still manual for now." + photoNote,
     });
     toast.success(pickupRequested ? "Donation saved — pickup requested" : "Donation saved");
 
@@ -153,6 +172,7 @@ const Donate = () => {
     setCondition(70);
     setPhotos([]);
     setSuggestion(null);
+    lastSuggestionRef.current = null;
     pickupIntent.current = false;
     if (photosRef.current) photosRef.current.value = "";
   });
@@ -328,7 +348,7 @@ const Donate = () => {
                 }}
                 className="bg-gold text-gold-foreground hover:bg-gold-dark w-full"
               >
-                {isSubmitting ? "Saving…" : "Continue"}
+                {uploadingPhotos ? "Uploading photos…" : isSubmitting ? "Saving…" : "Continue"}
               </Button>
               <Button
                 type="submit"
@@ -339,7 +359,7 @@ const Donate = () => {
                 variant="outline"
                 className="border-gold text-gold hover:bg-gold hover:text-gold-foreground w-full"
               >
-                {isSubmitting ? "Saving…" : "Schedule Pickup"}
+                {uploadingPhotos ? "Uploading photos…" : isSubmitting ? "Saving…" : "Schedule Pickup"}
               </Button>
             </div>
           </div>

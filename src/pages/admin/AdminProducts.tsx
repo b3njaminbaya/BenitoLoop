@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +41,13 @@ import {
   type Product,
 } from "@/lib/products";
 import { listCategories, type Category } from "@/lib/categories";
+import {
+  linkDonationToProduct,
+  listLinkedDonations,
+  searchDonationsToLink,
+  unlinkDonation,
+  type LinkedDonation,
+} from "@/lib/traceability";
 
 const productSchema = z.object({
   title: z.string().trim().min(2, "Title is required"),
@@ -64,6 +71,121 @@ const emptyDefaults: ProductFormValues = {
   impactLabel: "",
   stock: 1,
   status: "draft",
+};
+
+const DonationLinker = ({ productId }: { productId: string }) => {
+  const [linked, setLinked] = useState<LinkedDonation[]>([]);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<
+    { id: string; title: string; category: string; status: string; created_at: string }[]
+  >([]);
+  const [searching, setSearching] = useState(false);
+
+  const refresh = () => {
+    listLinkedDonations(productId).then(({ data, error }) => {
+      if (error) toast.error("Couldn't load linked donations", { description: error });
+      setLinked(data);
+    });
+  };
+
+  useEffect(() => {
+    refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId]);
+
+  useEffect(() => {
+    setSearching(true);
+    const timeout = setTimeout(() => {
+      searchDonationsToLink(query).then(({ data }) => {
+        setResults(data);
+        setSearching(false);
+      });
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [query]);
+
+  const linkedIds = new Set(linked.map((l) => l.donationId));
+  const candidates = results.filter((r) => !linkedIds.has(r.id));
+
+  const handleLink = async (donationId: string) => {
+    const { error } = await linkDonationToProduct(productId, donationId);
+    if (error) {
+      toast.error("Couldn't link donation", { description: error });
+      return;
+    }
+    refresh();
+  };
+
+  const handleUnlink = async (linkId: string) => {
+    const { error } = await unlinkDonation(linkId);
+    if (error) {
+      toast.error("Couldn't unlink donation", { description: error });
+      return;
+    }
+    refresh();
+  };
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <div>
+        <Label>Made from these donations</Label>
+        <p className="text-xs text-muted-foreground mt-1">
+          Shown to shoppers as "where this came from" on the product page.
+        </p>
+      </div>
+
+      {linked.length > 0 && (
+        <ul className="space-y-1">
+          {linked.map((l) => (
+            <li
+              key={l.linkId}
+              className="flex items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm"
+            >
+              <span>
+                {l.title} <span className="text-muted-foreground">({l.category})</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => handleUnlink(l.linkId)}
+                aria-label={`Unlink ${l.title}`}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <Input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search donations by title to link…"
+        className="h-9"
+      />
+      {query.trim() && (
+        <ul className="max-h-40 overflow-y-auto space-y-1">
+          {searching ? (
+            <li className="text-xs text-muted-foreground px-1">Searching…</li>
+          ) : candidates.length === 0 ? (
+            <li className="text-xs text-muted-foreground px-1">No matching donations.</li>
+          ) : (
+            candidates.map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => handleLink(r.id)}
+                  className="w-full text-left rounded-md border border-border px-3 py-1.5 text-sm hover:border-primary hover:text-primary transition-colors"
+                >
+                  {r.title} <span className="text-muted-foreground">({r.category}, {r.status})</span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  );
 };
 
 const ProductForm = ({
@@ -223,6 +345,9 @@ const ProductForm = ({
           </SelectContent>
         </Select>
       </div>
+
+      {editing && <DonationLinker productId={editing.id} />}
+
       <Button type="submit" disabled={isSubmitting || uploading} className="w-full bg-primary hover:bg-primary-dark">
         {editing ? "Save changes" : "Create product"}
       </Button>

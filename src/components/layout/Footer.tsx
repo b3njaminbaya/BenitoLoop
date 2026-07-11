@@ -102,6 +102,14 @@ const Footer = () => {
                 Terms of Service
               </a>
             </li>
+            <li>
+              <a
+                href="/cookiepolicy"
+                className="hover:text-gold transition-colors"
+              >
+                Cookie Policy
+              </a>
+            </li>
           </ul>
         </div>
 

@@ -6,6 +6,7 @@ export type OrderStatus =
   | "awaiting_manual_payment"
   | "paid"
   | "payment_failed"
+  | "shipped"
   | "fulfilled"
   | "cancelled";
 
@@ -20,6 +21,10 @@ export type Order = {
   shipping_address: string;
   mpesa_checkout_request_id: string | null;
   mpesa_receipt_number: string | null;
+  shipping_carrier: string | null;
+  tracking_number: string | null;
+  fulfilled_at: string | null;
+  credit_applied: number;
   created_at: string;
 };
 
@@ -30,42 +35,35 @@ export type CheckoutDetails = {
   address: string;
 };
 
-export async function createOrder(items: CartItem[], details: CheckoutDetails) {
+export async function createOrder(items: CartItem[], details: CheckoutDetails, applyCredit = false) {
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  // Generated client-side and inserted explicitly: guest checkouts have no
-  // session, and RLS only lets an owner (or admin) SELECT a row back after
-  // insert, so we can't rely on `.select().single()` here for a guest order.
-  const id = crypto.randomUUID();
 
-  const { error: orderError } = await supabase.from("orders").insert({
-    id,
-    total_amount: total,
-    customer_name: details.name,
-    customer_phone: details.phone,
-    customer_email: details.email || null,
-    shipping_address: details.address,
-  });
-
-  if (orderError) {
-    return { order: null, error: orderError.message };
-  }
-
-  const { error: itemsError } = await supabase.from("order_items").insert(
-    items.map((item) => ({
-      order_id: id,
+  // Stock is checked and decremented atomically inside this function so
+  // concurrent checkouts for the same product can't oversell it -- see
+  // migration 0017. It raises a descriptive error (e.g. "Only 2 left of
+  // ...") if any item can't be fulfilled, and nothing is inserted. Credit
+  // redemption (if requested) is capped and deducted in the same
+  // transaction -- see migration 0023.
+  const { data: orderId, error } = await supabase.rpc("create_order", {
+    p_customer_name: details.name,
+    p_customer_phone: details.phone,
+    p_customer_email: details.email || null,
+    p_shipping_address: details.address,
+    p_items: items.map((item) => ({
       product_id: item.id,
       title: item.title,
       price: item.price,
       quantity: item.qty,
-    }))
-  );
+    })),
+    p_apply_credit: applyCredit,
+  });
 
-  if (itemsError) {
-    return { order: null, error: itemsError.message };
+  if (error || !orderId) {
+    return { order: null, error: error?.message ?? "Couldn't create order" };
   }
 
   const order: Order = {
-    id,
+    id: orderId as string,
     status: "pending_payment",
     payment_method: "mpesa",
     total_amount: total,
@@ -75,6 +73,10 @@ export async function createOrder(items: CartItem[], details: CheckoutDetails) {
     shipping_address: details.address,
     mpesa_checkout_request_id: null,
     mpesa_receipt_number: null,
+    shipping_carrier: null,
+    tracking_number: null,
+    fulfilled_at: null,
+    credit_applied: 0,
     created_at: new Date().toISOString(),
   };
 
@@ -109,5 +111,16 @@ export async function listAllOrders() {
 
 export async function updateOrderStatus(id: string, status: OrderStatus) {
   const { error } = await supabase.from("orders").update({ status }).eq("id", id);
+  return { error: error?.message ?? null };
+}
+
+// Sets status and tracking info together in one atomic call, so a shipped
+// order can never end up missing a tracking number (see migration 0021).
+export async function markOrderShipped(id: string, carrier: string, trackingNumber: string) {
+  const { error } = await supabase.rpc("mark_order_shipped", {
+    p_order_id: id,
+    p_carrier: carrier || null,
+    p_tracking_number: trackingNumber,
+  });
   return { error: error?.message ?? null };
 }

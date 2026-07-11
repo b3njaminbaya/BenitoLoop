@@ -50,14 +50,71 @@ function toRow(input: ProductInput) {
 
 const SELECT_WITH_CATEGORY = "*, categories(name)";
 
-export async function listPublishedProducts() {
+export type ProductSort = "newest" | "price-asc" | "price-desc";
+
+export type ProductFilters = {
+  search?: string;
+  categoryId?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  sortBy?: ProductSort;
+  page?: number;
+  pageSize?: number;
+};
+
+const DEFAULT_PAGE_SIZE = 12;
+
+export async function listPublishedProducts(filters: ProductFilters = {}) {
+  const page = filters.page ?? 0;
+  const pageSize = filters.pageSize ?? DEFAULT_PAGE_SIZE;
+  const from = page * pageSize;
+  const to = from + pageSize - 1;
+
+  let query = supabase
+    .from("products")
+    .select(SELECT_WITH_CATEGORY, { count: "exact" })
+    .eq("status", "published");
+
+  const search = filters.search?.trim();
+  if (search) {
+    query = query.ilike("title", `%${search}%`);
+  }
+  if (filters.categoryId) {
+    query = query.eq("category_id", filters.categoryId);
+  }
+  if (filters.minPrice != null) {
+    query = query.gte("price", filters.minPrice);
+  }
+  if (filters.maxPrice != null) {
+    query = query.lte("price", filters.maxPrice);
+  }
+
+  if (filters.sortBy === "price-asc") {
+    query = query.order("price", { ascending: true });
+  } else if (filters.sortBy === "price-desc") {
+    query = query.order("price", { ascending: false });
+  } else {
+    query = query.order("created_at", { ascending: false });
+  }
+
+  const { data, error, count } = await query.range(from, to);
+
+  return {
+    data: ((data as unknown as ProductRow[] | null) ?? []).map(fromRow),
+    count: count ?? 0,
+    error: error?.message ?? null,
+  };
+}
+
+export async function getProductBySlug(slug: string) {
   const { data, error } = await supabase
     .from("products")
     .select(SELECT_WITH_CATEGORY)
+    .eq("slug", slug)
     .eq("status", "published")
-    .order("created_at", { ascending: false });
+    .maybeSingle();
   return {
-    data: ((data as unknown as ProductRow[] | null) ?? []).map(fromRow),
+    data: data ? fromRow(data as unknown as ProductRow) : null,
     error: error?.message ?? null,
   };
 }

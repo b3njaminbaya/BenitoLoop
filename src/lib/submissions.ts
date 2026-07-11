@@ -7,6 +7,8 @@ export type DonationSubmission = {
   notes?: string;
   photoCount: number;
   pickupRequested: boolean;
+  aiSuggestedCategory?: string;
+  aiConfidence?: number;
 };
 
 export type PartnerApplication = {
@@ -18,15 +20,25 @@ export type PartnerApplication = {
 };
 
 export async function submitDonation(entry: DonationSubmission) {
+  // Generated client-side, same reasoning as orders: a guest insert can't
+  // rely on `.select()` to read its own row back afterward, and we need
+  // the id right away to attach uploaded photos to it.
+  const id = crypto.randomUUID();
+
   const { error } = await supabase.from("donations").insert({
+    id,
     title: entry.title,
     category: entry.category,
     condition: entry.condition,
     notes: entry.notes || null,
     photo_count: entry.photoCount,
     pickup_requested: entry.pickupRequested,
+    ai_suggested_category: entry.aiSuggestedCategory ?? null,
+    ai_confidence: entry.aiConfidence ?? null,
   });
-  return { error: error?.message ?? null };
+
+  if (error) return { donationId: null, error: error.message };
+  return { donationId: id, error: null };
 }
 
 export async function submitPartnerApplication(entry: PartnerApplication) {
